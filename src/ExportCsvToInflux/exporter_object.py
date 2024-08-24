@@ -1,8 +1,10 @@
+from itertools import chain
+
 from pytz.exceptions import UnknownTimeZoneError
 from .config_object import Configuration
 from .influx_object import InfluxObject
 from decimal import InvalidOperation
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from .csv_object import CSVObject
 from decimal import Decimal
 from pytz import timezone
@@ -83,6 +85,193 @@ class ExporterObject(object):
 
         return results
 
+    @staticmethod
+    def __process_tags_fields_with_data_type(columns,
+                                             row,
+                                             conf,
+                                             encoding):
+        """Private function: __process_tags_fields"""
+
+        results = dict()
+        for column in columns:
+            v = 0
+            if column in row:
+                v = row[column]
+                if conf.limit_string_length_columns and column in conf.limit_string_length_columns:
+                    v = str(v)[:conf.limit_length + 1]
+                if conf.force_string_columns and column in conf.force_string_columns:
+                    v = str(v)
+                if conf.force_int_columns and column in conf.force_int_columns:
+                    try:
+                        v = int(v)
+                    except ValueError:
+                        print('Warning: Failed to force "{0}" to int, skip...'.format(v))
+                if conf.force_float_columns and column in conf.force_float_columns:
+                    try:
+                        v = float(v)
+                    except ValueError:
+                        print('Warning: Failed to force "{0}" to float, skip...'.format(v))
+
+                # If field is empty
+                try:
+                    len_v = len(str(v))
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    len_v = 1  # Python2.7: If error happens, that means it has at least one character
+                if len_v == 0:
+                    # Process the empty
+                    # if int_type[column] is True:
+                    #     v = -999
+                    # elif float_type[column] is True:
+                    #     v = -999.0
+                    # else:
+                    #     v = '-'
+
+                    # Process the force
+                    if conf.force_string_columns and column in conf.force_string_columns:
+                        v = '-'
+                    if conf.force_int_columns and column in conf.force_int_columns:
+                        v = -999
+                    if conf.force_float_columns and column in conf.force_float_columns:
+                        v = -999.0
+
+            results[column] = v
+
+        if conf.unique:
+            results['uniq'] = 'uniq-{0}'.format(str(uuid.uuid4())[:8])
+
+        return results
+
+    @staticmethod
+    def __is_empty_or_none(value):
+        if len(value.strip()) == 0 or not value or value is None:
+            return True
+        return False
+
+    @staticmethod
+    def __is_float(value):
+        """Private Function: validate float value """
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def __is_integer(value):
+        try:
+            if float(value).is_integer():
+                return True
+            else:
+                return False
+        except TypeError:
+            return False
+
+    @staticmethod
+    def __process_fields_with_data_type(columns,
+                                        row,
+                                        conf,
+                                        encoding,
+                                        int_type=None,
+                                        float_type=None):
+        """Private function: __process_fields_with_data_type"""
+
+        results = dict()
+        field_map_type = OrderedDict()
+        for column in columns:
+            # v = 0
+            if ':' in column:
+                field_column, field_type = column.split(':')
+                field_map_type[field_column] = field_type
+
+                if field_column in row:
+                    v = row[field_column]
+                    if field_map_type[field_column] == 'string':
+                        # v = row[field_column]
+                        if len(v.strip()) == 0:
+                            v = 'NaN'
+                        if v is not None and len(v.strip()) != 0:
+                            v = str(v)
+
+                        if conf.limit_string_length_columns and field_column in conf.limit_string_length_columns:
+                            # v = str(v)[:conf.limit_length + 1]
+                            if v is not None and len(v.strip()) != 0:
+                                v = str(v)[:conf.limit_length + 1]
+                                # print('endpoint value is: --', row['endpoint'], 'length is: ', len(row['endpoint']))
+                            # elif len(row[field_column].strip()) == 0:
+                            #     v = 'NaN'
+                            else:
+                                v = 'NaN'
+                        if conf.force_string_columns and field_column in conf.force_string_columns:
+                            # v = str(v)
+                            if v is not None and len(v.strip()) != 0:
+                                v = str(row[field_column])
+                                # print('endpoint value is: --', row['endpoint'], 'length is: ', len(row['endpoint']))
+                            # elif len(row[field_column].strip()) == 0 or row[field_column] is None:
+                            #     v = 'NaN'
+                            else:
+                                v = 'NaN'
+                    elif field_map_type[field_column] == 'float':
+                        # v = row[field_column]
+                        if len(v.strip()) != 0 and v is not None and ExporterObject.__is_float(v):
+                            v = float(v)
+                        # else:
+                        #     v = -999.0
+                        if conf.force_float_columns and field_column in conf.force_float_columns:
+                            try:
+                                v = float(v)
+                            except ValueError:
+                                print('Warning: Failed to force "{0}" to float, skip...'.format(v))
+                    elif field_map_type[field_column] == 'integer':
+                        # v = row[field_column]
+                        if v is not None and ExporterObject.__is_integer(v):
+                            v = int(v)
+                        # else:
+                        #     v = int(-999)
+                        if conf.force_int_columns and field_column in conf.force_int_columns:
+                            try:
+                                v = int(v)
+                            except ValueError:
+                                print('Warning: Failed to force "{0}" to int, skip...'.format(v))
+                    else:
+                        v = row[field_column]
+
+                    results[field_column] = v
+            else:
+                # 没有设置来源--source、也没设置field value类型（如endpoint:string,heatFee:float......）
+                v = row[column]
+                # if v:
+                #     results[column] = v
+                # If field is empty
+                try:
+                    len_v = len(str(v).strip())
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    len_v = 1  # Python2.7: If error happens, that means it has at least one character
+
+                if len_v == 0:
+                    # Process the empty
+                    if int_type[column] is True:
+                        v = -999
+                    elif float_type[column] is True:
+                        v = -999.0
+                    else:
+                        v = 'NaN'
+
+                    # Process the force
+                    if conf.force_string_columns and field_column in conf.force_string_columns:
+                        # v = '-'
+                        v = 'NaN'
+                    if conf.force_int_columns and field_column in conf.force_int_columns:
+                        v = -999
+                    if conf.force_float_columns and field_column in conf.force_float_columns:
+                        v = -999.0
+                results[column] = v
+
+        if conf.unique:
+            results['uniq'] = 'uniq-{0}'.format(str(uuid.uuid4())[:8])
+        # print('results value is:', results)
+        # print('field_map_type value is:', field_map_type)
+        return results
+
     def __check_match_and_filter(self,
                                  row,
                                  check_columns,
@@ -146,6 +335,10 @@ class ExporterObject(object):
     @staticmethod
     def __validate_columns(csv_headers, check_columns):
         """Private Function: validate_columns """
+        for i, val in enumerate(check_columns):
+            if ':' in val:
+                field_column, field_type = val.split(':')
+                check_columns[i] = field_column
 
         if check_columns:
             if len(check_columns) == 1 and check_columns[0] == '*':
@@ -295,6 +488,8 @@ class ExporterObject(object):
         :key str tag_columns: the tag columns, separated by comma (default None)
         :key str time_format: the time format (default %Y-%m-%d %H:%M:%S)
         :key str field_columns: the filed columns, separated by comma
+        :key str field_columns_with_data_type: the filed columns with data type, separated by comma ":", Example like: endpoint:string,totalFee:float......
+        :key str custom_field_value_type: custom field value by input, Example like: endpoint:string,totalFee:float......
         :key str delimiter: the csv delimiter (default comma)
         :key str lineterminator: the csv line terminator (default comma)
         :key int batch_size: how many rows insert every time (default 500)
@@ -370,7 +565,15 @@ class ExporterObject(object):
             # Validate field_columns, tag_columns, match_columns, filter_columns
             field_columns = self.__validate_columns(csv_headers, conf.field_columns)
             tag_columns = self.__validate_columns(csv_headers, conf.tag_columns)
-            if not field_columns:
+
+            merged_tag_field_columns = list(chain(conf.field_columns_with_data_type, conf.tag_columns))
+
+            field_columns_with_data_type = self.__validate_columns(csv_headers, conf.field_columns_with_data_type)
+
+            # print('tag_columns value is:', tag_columns)
+            # print('field_columns_with_data_type value is:', field_columns_with_data_type)
+            # print('conf.custom_field_value_type value is:', conf.custom_field_value_type)
+            if not conf.custom_field_value_type and not field_columns:
                 print('Error: The input --field_columns does not expected. '
                       'Please check the fields are in csv headers or not. '
                       'Writer stopping for {0}...'.format(csv_file_item))
@@ -413,69 +616,130 @@ class ExporterObject(object):
                                                             target=new_csv_file,
                                                             data=data,
                                                             save_csv_file=not conf.force_insert_even_csv_no_update)
-
             # Process influx csv
             data_points = list()
             count = 0
             timestamp = 0
-            convert_csv_data_to_int_float = csv_object.convert_csv_data_to_int_float(csv_reader=csv_reader_data,
-                                                                                     ignore_filed=conf.time_column)
-            for row, int_type, float_type in convert_csv_data_to_int_float:
-                # Process Match & Filter: If match_columns exists and filter_columns not exists
-                match_status = self.__check_match_and_filter(row,
-                                                             match_columns,
-                                                             conf.match_by_string,
-                                                             conf.match_by_regex,
-                                                             check_type='match')
-                filter_status = self.__check_match_and_filter(row,
-                                                              filter_columns,
-                                                              conf.filter_by_string,
-                                                              conf.filter_by_regex,
-                                                              check_type='filter',
-                                                              csv_file_length=csv_file_length)
-                if match_columns and not filter_columns:
-                    if match_status is False:
-                        continue
+            if conf.custom_field_value_type:
+                convert_csv_data_custom_columns = csv_object.convert_csv_data_with_custom_columns(
+                    merged_tag_field_columns,
+                    csv_reader=csv_reader_data,
+                    ignore_filed=conf.time_column)
+                # print('convert_csv_data_custom_columns value is:', convert_csv_data_custom_columns)
+                for row in convert_csv_data_custom_columns:
+                    # print('convert_csv_data_custom_columns\'s row is:', row)
+                    # Process Match & Filter: If match_columns exists and filter_columns not exists
+                    match_status = self.__check_match_and_filter(row,
+                                                                 match_columns,
+                                                                 conf.match_by_string,
+                                                                 conf.match_by_regex,
+                                                                 check_type='match')
+                    filter_status = self.__check_match_and_filter(row,
+                                                                  filter_columns,
+                                                                  conf.filter_by_string,
+                                                                  conf.filter_by_regex,
+                                                                  check_type='filter',
+                                                                  csv_file_length=csv_file_length)
 
-                # Process Match & Filter: If match_columns not exists and filter_columns exists
-                if not match_columns and filter_columns:
-                    if filter_status is True:
-                        continue
+                    if match_columns and not filter_columns:
+                        if match_status is False:
+                            continue
 
-                # Process Match & Filter: If match_columns, filter_columns both exists
-                if match_columns and filter_columns:
-                    if match_status is False and filter_status is True:
-                        continue
+                    # Process Match & Filter: If match_columns not exists and filter_columns exists
+                    if not match_columns and filter_columns:
+                        if filter_status is True:
+                            continue
 
-                # Process Time
-                timestamp = self.__process_timestamp(row, conf)
+                    # Process Match & Filter: If match_columns, filter_columns both exists
+                    if match_columns and filter_columns:
+                        if match_status is False and filter_status is True:
+                            continue
 
-                # Process tags
-                tags = self.__process_tags_fields(columns=tag_columns,
-                                                  row=row,
-                                                  int_type=int_type,
-                                                  float_type=float_type,
-                                                  conf=conf,
-                                                  encoding=csv_object.csv_charset)
+                    # Process Time
+                    timestamp = self.__process_timestamp(row, conf)
 
-                # Process fields
-                fields = self.__process_tags_fields(columns=field_columns,
-                                                    row=row,
-                                                    int_type=int_type,
-                                                    float_type=float_type,
-                                                    conf=conf,
-                                                    encoding=csv_object.csv_charset)
+                    # Process tags
+                    tags = self.__process_tags_fields_with_data_type(columns=tag_columns,
+                                                                     row=row,
+                                                                     conf=conf,
+                                                                     encoding=csv_object.csv_charset)
 
-                point = {'measurement': conf.db_measurement, 'time': timestamp, 'fields': fields, 'tags': tags}
-                data_points.append(point)
-                count += 1
+                    # Process fields
+                    fields = self.__process_fields_with_data_type(columns=field_columns_with_data_type,
+                                                                  row=row,
+                                                                  conf=conf,
+                                                                  encoding=csv_object.csv_charset)
 
-                # Write points
-                data_points_len = len(data_points)
-                if data_points_len % conf.batch_size == 0:
-                    self.__write_points(count, csv_file_item, data_points_len, influx_version, client,
-                                        data_points, conf, influx_object)
-                    data_points = list()
+                    point = {'measurement': conf.db_measurement, 'time': timestamp, 'fields': fields, 'tags': tags}
+                    data_points.append(point)
+                    count += 1
+
+                    # Write points
+                    data_points_len = len(data_points)
+                    if data_points_len % conf.batch_size == 0:
+                        self.__write_points(count, csv_file_item, data_points_len, influx_version, client,
+                                            data_points, conf, influx_object)
+                        data_points = list()
+            else:
+                convert_csv_data_to_int_float = csv_object.convert_csv_data_to_int_float(csv_reader=csv_reader_data,
+                                                                                         ignore_filed=conf.time_column)
+                # print('convert_csv_data_to_int_float value is:', convert_csv_data_to_int_float)
+                for row, int_type, float_type in convert_csv_data_to_int_float:
+                    # Process Match & Filter: If match_columns exists and filter_columns not exists
+                    match_status = self.__check_match_and_filter(row,
+                                                                 match_columns,
+                                                                 conf.match_by_string,
+                                                                 conf.match_by_regex,
+                                                                 check_type='match')
+                    filter_status = self.__check_match_and_filter(row,
+                                                                  filter_columns,
+                                                                  conf.filter_by_string,
+                                                                  conf.filter_by_regex,
+                                                                  check_type='filter',
+                                                                  csv_file_length=csv_file_length)
+                    if match_columns and not filter_columns:
+                        if match_status is False:
+                            continue
+
+                    # Process Match & Filter: If match_columns not exists and filter_columns exists
+                    if not match_columns and filter_columns:
+                        if filter_status is True:
+                            continue
+
+                    # Process Match & Filter: If match_columns, filter_columns both exists
+                    if match_columns and filter_columns:
+                        if match_status is False and filter_status is True:
+                            continue
+
+                    # Process Time
+                    timestamp = self.__process_timestamp(row, conf)
+
+                    # Process tags
+                    tags = self.__process_tags_fields(columns=tag_columns,
+                                                      row=row,
+                                                      int_type=int_type,
+                                                      float_type=float_type,
+                                                      conf=conf,
+                                                      encoding=csv_object.csv_charset)
+
+                    # Process fields
+                    fields = self.__process_tags_fields(columns=field_columns,
+                                                        row=row,
+                                                        int_type=int_type,
+                                                        float_type=float_type,
+                                                        conf=conf,
+                                                        encoding=csv_object.csv_charset)
+
+                    point = {'measurement': conf.db_measurement, 'time': timestamp, 'fields': fields, 'tags': tags}
+                    data_points.append(point)
+                    count += 1
+
+                    # Write points
+                    data_points_len = len(data_points)
+                    if data_points_len % conf.batch_size == 0:
+                        self.__write_points(count, csv_file_item, data_points_len, influx_version, client,
+                                            data_points, conf, influx_object)
+                        data_points = list()
 
             # Write rest points
             data_points_len = len(data_points)

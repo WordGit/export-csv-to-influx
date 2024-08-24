@@ -7,4 +7,4 @@ build/
 *.pyc
 debug*
 demo*
-
+.gitignore

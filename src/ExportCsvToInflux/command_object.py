@@ -10,7 +10,6 @@ class UserNamespace(object):
 
 def export_csv_to_influx():
     parser = argparse.ArgumentParser(description='CSV to InfluxDB.')
-
     # Parse: Parse the server name, and judge the influx version
     parser.add_argument('-s', '--server', nargs='?', default='localhost:8086', const='localhost:8086',
                         help='InfluxDB Server address. Default: localhost:8086')
@@ -19,8 +18,7 @@ def export_csv_to_influx():
     parser.parse_known_args(namespace=user_namespace)
     influx_object = InfluxObject(db_server_name=user_namespace.server)
     influx_version = influx_object.get_influxdb_version()
-    print('Info: The influxdb version is {influx_version}'.format(influx_version=influx_version))
-
+    print('Info: The influxDB version is {influx_version}'.format(influx_version=influx_version))
     # influxdb 0.x, 1.x
     parser.add_argument('-db', '--dbname',
                         required=True if influx_version.startswith('0') or influx_version.startswith('1') else False,
@@ -29,7 +27,6 @@ def export_csv_to_influx():
                         help='For 0.x, 1.x only, InfluxDB User name.')
     parser.add_argument('-p', '--password', nargs='?', default='admin', const='admin',
                         help='For 0.x, 1.x only, InfluxDB Password.')
-
     # influxdb 2.x
     parser.add_argument('-http_schema', '--http_schema', nargs='?', default='http', const='http',
                         help='For 2.x only, the influxdb http schema, could be http or https. Default: http.')
@@ -58,8 +55,14 @@ def export_csv_to_influx():
                         help='Timestamp format. Default: \'%%Y-%%m-%%d %%H:%%M:%%S\' e.g.: 1970-01-01 00:00:00')
     parser.add_argument('-tz', '--time_zone', nargs='?', default='UTC', const='UTC',
                         help='Timezone of supplied data. Default: UTC')
-    parser.add_argument('-fc', '--field_columns', required=True,
+    parser.add_argument('-fc', '--field_columns', nargs='?', default=None, const=None,
                         help='List of csv columns to use as fields, separated by comma')
+    parser.add_argument('-fcwdt', '--field_columns_with_data_type', nargs='?', default=None, const=None,
+                        help='List of csv columns with data type to use as fields, separated by comma ":" '
+                             'Example like: endpoint:string,totalFee:float......')
+    parser.add_argument('-cfvt', '--custom_field_value_type', nargs='?', default=False, const=False,
+                        help='custom field value type, separated by comma ":" '
+                             'Example like: endpoint:string,totalFee:float......')
     parser.add_argument('-tc', '--tag_columns', nargs='?', default=None, const=None,
                         help='List of csv columns to use as tags, separated by comma. Default: None')
     parser.add_argument('-b', '--batch_size', nargs='?', default=500, const=500,
@@ -100,7 +103,6 @@ def export_csv_to_influx():
                         help='Write duplicated points. Default: False.')
     parser.add_argument('--csv_charset', '--csv_charset', nargs='?', default=None, const=None,
                         help='The csv charset. Default: None, which will auto detect')
-
     args = parser.parse_args(namespace=user_namespace)
     exporter = ExporterObject()
     input_data = {
@@ -114,6 +116,8 @@ def export_csv_to_influx():
         'time_format': args.time_format,
         'time_zone': args.time_zone,
         'field_columns': args.field_columns,
+        'field_columns_with_data_type': args.field_columns_with_data_type,
+        'custom_field_value_type': args.custom_field_value_type,
         'tag_columns': args.tag_columns,
         'batch_size': args.batch_size,
         'delimiter': args.delimiter,

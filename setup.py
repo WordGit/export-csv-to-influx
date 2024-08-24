@@ -31,8 +31,8 @@ setup(
     include_package_data=True,
     long_description=readme(),
     long_description_content_type='text/markdown',
-    author='Bugazelle',
-    author_email='463407426@qq.com',
+    author='yyc',
+    author_email='136798810@qq.com',
     keywords=['python', 'csv', 'influx'],
     install_requires=[
         'influxdb>=5.3.1',

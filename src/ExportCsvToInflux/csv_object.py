@@ -1,5 +1,8 @@
 from chardet.universaldetector import UniversalDetector
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
+
+from pytz import unicode
+
 from .base_object import BaseObject
 from itertools import tee
 from glob import glob
@@ -47,7 +50,6 @@ class UnicodeDictReader:
     def __iter__(self):
         return self
 
-
 class CSVObject(object):
     """CSV Object"""
 
@@ -79,6 +81,31 @@ class CSVObject(object):
         csv_object['csv_charset'] = encoding
 
         return cls(**csv_object)
+
+    @staticmethod
+    def __is_empty_or_none(value):
+        if len(value.strip()) == 0 or not value or value is None:
+            return True
+        return False
+
+    @staticmethod
+    def __is_float(value):
+        """Private Function: validate float value """
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def __is_integer(value):
+        try:
+            if float(value).is_integer():
+                return True
+            else:
+                return False
+        except TypeError:
+            return False
 
     def compatible_dict_reader(self, f, encoding, **kwargs):
         """Function: compatible_dict_reader
@@ -365,6 +392,210 @@ class CSVObject(object):
                     else:
                         row[key] = float(key) if float_type[key] is True else key
                 yield row, int_type, float_type
+            i += 1
+
+        # Close file
+        if file_name:
+            f.close()
+
+    @staticmethod
+    def process_columns_to_map_type(columns):
+        """Private function: __process_columns_map_type"""
+        field_map_type = OrderedDict()
+        for column in columns:
+            if ':' in column:
+                field_column, field_type = column.split(':')
+                field_map_type[field_column] = field_type
+            else:
+                # tag fields默认string类型
+                field_map_type[column] = 'string'
+        # print('field_map_type value is:', field_map_type)
+        return field_map_type
+
+    def convert_csv_data_with_custom_columns(self, columns, file_name=None, csv_reader=None, ignore_filed=None):
+        """Function: convert_csv_data_with_custom_columns
+
+        :param columns: include tag and field column
+        :param file_name: the file name (default None)
+        :param csv_reader: the csv dict reader (default None)
+            The csv_reader could come from 2 ways:
+            1. use csv.DictReader to get the csv_reader object
+            2. use dict to make up the csv_reader, the dict format is as following
+                [
+                    {'csv_header_1': 'value', 'csv_header_2': 'value', 'csv_header_3': 'value', ...},
+                    {'csv_header_1': 'value', 'csv_header_2': 'value', 'csv_header_3': 'value', ...},
+                    {'csv_header_1': 'value', 'csv_header_2': 'value', 'csv_header_3': 'value', ...},
+                    ...
+                ]
+        :param ignore_filed: ignore the certain column, case sensitive
+        """
+        field_map_type = CSVObject.process_columns_to_map_type(columns)
+        # init
+        int_type = defaultdict(list)
+        float_type = defaultdict(list)
+        str_type = defaultdict(list)
+        bool_type = defaultdict(list)
+        keys = list()
+        csv_reader = list() if csv_reader is None else csv_reader
+        csv_reader_bk = csv_reader
+        has_header = True
+
+        # Verify the csv_reader
+        csv_reader_type = type(csv_reader)
+        is_generator_type = isinstance(csv_reader, types.GeneratorType)
+        if csv_reader_type != list and csv_reader_type != csv.DictReader and not is_generator_type:
+            error_message = 'Error: The csv_reader type is not expected: {0}, ' \
+                            'should list type or csv.DictReader'.format(csv_reader_type)
+            sys.exit(error_message)
+        if is_generator_type:
+            csv_reader, csv_reader_bk = tee(csv_reader)
+
+        # Get csv_reader from csv file
+        f = None
+        if file_name:
+            has_header = self.get_csv_header(file_name)
+            with self.compatible_open(file_name, encoding=self.csv_charset) as f:
+                csv_reader = self.compatible_dict_reader(f, encoding=self.csv_charset, delimiter=self.delimiter,
+                                                         lineterminator=self.lineterminator)
+                csv_reader, csv_reader_bk = tee(csv_reader)
+
+        # Process, field value可以是整数、浮点数、字符串和布尔值
+        for row in csv_reader:
+            keys = row.keys()
+            # print('keys value is:', keys)
+            for key in keys:
+                if ignore_filed is not None and ignore_filed == key:
+                    continue
+
+                if key in field_map_type:
+                    value = row[key]
+                    if field_map_type[key] == 'string':
+                        len_value = len(value.strip())
+                        # Continue If Value Empty or empty string ""
+                        if len_value == 0:
+                            str_type[key].append(False)
+                            continue
+                        str_type[key].append(True)
+                    elif field_map_type[key] == 'integer':
+                        # Valid Int Type
+                        try:
+                            if float(value).is_integer():
+                                int_type[key].append(True)
+                            else:
+                                int_type[key].append(False)
+                        except ValueError:
+                            int_type[key].append(False)
+                    elif field_map_type[key] == 'float':
+                        # Valid Float Type
+                        try:
+                            float(value)
+                            float_type[key].append(True)
+                        except ValueError:
+                            float_type[key].append(False)
+                    else:
+                        bool_type[key].append(True) if bool(value) is True else bool_type[key].append(False)
+
+                # Continue if ignore_filed is provided
+                if ignore_filed is not None and ignore_filed == key:
+                    int_type[key].append(False)
+                    float_type[key].append(False)
+                    str_type[key].append(False)
+                    continue
+
+        # Valid the key if no header
+        if keys and not has_header:
+            for key in keys:
+                if ignore_filed is not None and ignore_filed == key:
+                    continue
+                if key in field_map_type:
+                    if field_map_type[key] == 'string':
+                        len_key = len(key.strip())
+                        # Continue If Key Empty
+                        if len_key == 0:
+                            continue
+                    elif field_map_type[key] == 'integer':
+                        # Valid Int Type
+                        try:
+                            if float(key).is_integer():
+                                int_type[key].append(True)
+                            else:
+                                int_type[key].append(False)
+                        except ValueError:
+                            int_type[key].append(False)
+                    elif field_map_type[key] == 'float':
+                        # Valid Float Type
+                        try:
+                            float(key)
+                            float_type[key].append(True)
+                        except ValueError:
+                            float_type[key].append(False)
+                    else:
+                        bool_type[key].append(True) if bool(key) is True else bool_type[key].append(False)
+
+        # Finalize Type
+        int_type = {k: all(int_type[k]) for k in int_type}
+        float_type = {k: all(float_type[k]) for k in float_type}
+        str_type = {k: all(str_type[k]) for k in str_type}
+        bool_type = {k: all(bool_type[k]) for k in bool_type}
+
+        # Yield Data
+        i = 1
+        for row in csv_reader_bk:
+            keys = row.keys()
+            for key in keys:
+                if key in field_map_type:
+                    value = row[key]
+                    if field_map_type[key] == 'string':
+                        # len_value = len(value)
+                        # if len_value == 0:
+                        #     row[key] = str(value)
+                        if len(value.strip()) == 0:
+                            row[key] = 'NaN'
+                        if value is not None and len(value.strip()) != 0:
+                            row[key] = str(value)
+                    elif field_map_type[key] == 'integer':
+                        if value is not None and CSVObject.__is_integer(value):
+                            v = int(value)
+                        else:
+                            v = int(-999)
+                        row[key] = v
+                    elif field_map_type[key] == 'float':
+                        # print('csv column {0} value is:[{1}] convert to float'.format(key, value))
+                        if len(value.strip()) != 0 and value is not None and CSVObject.__is_float(value):
+                            v = float(value)
+                        else:
+                            v = -999.0
+                        row[key] = float(v)
+                    else:
+                        row[key] = True if bool_type[key] is True else False
+            yield row
+
+            if not has_header and i == 1:
+                for key in keys:
+                    if key in field_map_type:
+                        if field_map_type[key] == 'string':
+                            # len_key = len(key)
+                            # if len_key == 0:
+                            #     row[key] = str(value)
+                            if len(value.strip()) == 0:
+                                row[key] = 'NaN'
+                            if value is not None and len(value.strip()) != 0:
+                                row[key] = str(value)
+                        elif field_map_type[key] == 'integer':
+                            if value is not None and CSVObject.__is_integer(value):
+                                v = int(value)
+                            else:
+                                v = int(-999)
+                            row[key] = v
+                        elif field_map_type[key] == 'float':
+                            if len(value.strip()) != 0 and value is not None and CSVObject.__is_float(value):
+                                v = float(value)
+                            else:
+                                v = -999.0
+                            row[key] = float(v)
+                        else:
+                            row[key] = True if bool_type[key] is True else False
+                yield row
             i += 1
 
         # Close file
