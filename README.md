@@ -31,7 +31,7 @@ pip install ExportCsvToInflux
 9. Auto Create database if not exist
 10. Allow to drop database before inserting data
 11. Allow to drop measurements before inserting data
-12. Allow to custom field value type(string,integer,float) before inserting data, this feature where you need transfer data from source influxDB to another one is perfect
+12. <font color=FF0000>Allow to custom field value type(string,integer,float) before inserting data, this feature where you need transfer data from source influxDB to another one is perfect</font>
 ## Command Arguments
 
 You could use `export_csv_to_influx -h` to see the help guide.
@@ -42,7 +42,7 @@ You could use `export_csv_to_influx -h` to see the help guide.
 > 3. If some csv cells have no value, auto fill the influx db based on column data type: `int: -999`, `float: -999.0`, `string: -`
 
 | #  | Option                                   | Mandatory              | Default           | Description                                                                                                                                                                                    |
-|:--:|------------------------------------------|:----------------------:|:-----------------:|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| -- |:----------------------------------------:|:----------------------:|:-----------------:|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 1  | `-c, --csv`                              | Yes                    |                   | CSV file path, or the folder path                                                                                                                                                              |
 | 2  | `-db, --dbname`                          | For 0.x, 1.x only: Yes |                   | InfluxDB Database name                                                                                                                                                                         |
 | 3  | `-u, --user`                             | For 0.x, 1.x only: No  | admin             | InfluxDB User name                                                                                                                                                                             |
@@ -175,8 +175,8 @@ timestamp,url,response_time
       </tr>
       <tr>
          <td style="border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">6</td>
-         <td style="border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">New feature with custom field value type with parameter: --field_columns_with_data_type</td>
-         <td style="border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">
+         <td style="background-color: red;border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">New feature with custom field value type with parameter: --field_columns_with_data_type</td>
+         <td style="background-color: red;border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">
             <pre>export_csv_to_influx \<br>  --csv demo.csv \<br>  --dbname demo \<br>  --measurement demo \<br>  --tag_columns projectId,merchantId,...... \<br>  --field_columns_with_data_type coldFee:float,currentCount:float,...... \<br>  --custom_field_value_type True \<br>  -t time \<br>  -tf "%Y/%m/%d %H:%M:%S" \<br>  -b 3000 \<br>  --force_insert_even_csv_no_update True \<br>  --user admin \<br>  --password admin \<br>  --server 127.0.0.1:8086<br></pre>
          </td>
          <td style="border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">
@@ -185,8 +185,8 @@ timestamp,url,response_time
       </tr>
       <tr>
          <td style="border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">7</td>
-         <td style="border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal", bgcolor=DarkSeaGreen>New feature with custom field value type with parameter: --field_columns_with_data_type and --force_float/int/string_columns</td>
-         <td style="border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">
+         <td style="background-color: red;border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">New feature with custom field value type with parameter: --field_columns_with_data_type and --force_float/int/string_columns</td>
+         <td style="background-color: red;border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">
             <pre>export_csv_to_influx \<br>  --csv demo.csv \<br>  --dbname demo \<br>  --measurement demo \<br>  --tag_columns projectId,merchantId,...... \<br>  --field_columns_with_data_type coldFee:float,currentCount:float,...... \<br>  --custom_field_value_type True \<br>  -t time \<br>  -tf "%Y/%m/%d %H:%M:%S" \<br>  -b 3000 \<br>  --force_insert_even_csv_no_update True \<br>  --force_float_columns coldFee,currentCount,...... \<br>  --user admin \<br>  --password admin \<br>  --server 127.0.0.1:8086<br></pre>
          </td>
          <td style="border-color:inherit;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;overflow:hidden;padding:10px 5px;text-align:left;vertical-align:top;word-break:normal">
